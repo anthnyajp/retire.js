@@ -4,6 +4,9 @@ To use the development version:
 
 1. Clone the repo `git clone https://github.com/RetireJS/retire.js`
 2. Run build_chrome.sh from the root of the repo
+    ls -l build_chrome.sh
+    chmod +x build_chrome.sh
+    ./build_chrome.sh
 3. Open [chrome://extensions/](chrome://extensions/)
 4. Check "Developer mode"
 5. Click "Load unpacked extension..." and locate the "chrome/extension" folder inside the repo

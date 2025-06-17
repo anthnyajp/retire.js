@@ -14,7 +14,6 @@
     "webRequest",
     "offscreen",
     "webNavigation"
-    <!-- Removed "tabs" permission as it is not used -->
   ],
   "host_permissions": [
     "<all_urls>"
