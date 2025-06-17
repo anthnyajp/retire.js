@@ -17,9 +17,9 @@ updates:
       interval: "daily"
 
   # Enable version updates for Docker
-  - package-ecosystem: "docker"
+  - package-ecosystem: "package"
     # Look for a `Dockerfile` in the `root` directory
-    directory: "/"
+    directory: "/chrome/build/package-lock.json"
     # Check for updates once a week
     schedule:
       interval: "weekly"
