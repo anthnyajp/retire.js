@@ -1,60 +1,84 @@
-var realwin = window;
-var realdoc = document;
+const realwin = window;
+const realdoc = document;
 console.log("inner sandbox loaded");
 
 window.addEventListener("message", function (evt) {
-  //console.log('inner', evt, evt.data);
-  if (!evt.data.script) return evt.source.postMessage({ done: "true" }, "*");
-  var repoFuncs = evt.data.repoFuncs;
+  if (!evt.data || !evt.data.script) return;
+
+  const repoFuncs = evt.data.repoFuncs || {};
   console.log("I'm trying!!");
-  //try {
+
+  // Disable alert, prompt, confirm
   ["alert", "prompt", "confirm"].forEach(function (n) {
     try {
       Object.defineProperty(window, n, {
         get: function () {
-          return function () {};
+          return function () { };
         },
-        set: function () {},
+        set: function () { },
         enumerable: true,
-        configurable: false,
+        configurable: false, // avoid making it reconfigurable
       });
-    } catch (e) {}
+    } catch (e) {
+      console.warn(`Failed to override ${n}:`, e);
+    }
   });
 
-  //Make sure other scripts are loaded correctly
+  // Set base href if provided
   if (evt.data.url) {
-    document
-      .getElementsByTagName("base")[0]
-      .setAttribute(
+    try {
+      let base = document.querySelector("base");
+      if (!base) {
+        base = document.createElement("base");
+        document.head.appendChild(base);
+      }
+      base.setAttribute(
         "href",
-        evt.data.url.replace(/(https?:\/\/[^\/]+).*/, "$1/")
+        new URL(evt.data.url).origin + "/"
       );
+    } catch (e) {
+      console.warn("Failed to set base href:", e);
+    }
   }
 
-  //Anti framebusting
-  window.fun = new Function("top", evt.data.script);
+  // Run the script safely in the sandbox
   try {
+    const sandboxedFn = new Function("top", evt.data.script);
     console.log("SANDBOX invoking", evt.data.url);
-    window.fun(window);
+    sandboxedFn(window);
   } catch (e) {
     console.warn("SANDBOX ERROR", e);
   }
+
+  // Evaluate repo functions and post back
+  processRepoFunctions(repoFuncs, evt);
+
+  // Final done message
+  if (evt.source && typeof evt.source.postMessage === "function") {
+    evt.source.postMessage({ done: "true" }, evt.origin || "*");
+  }
+});
+
+// Helper to evaluate detection functions
+function processRepoFunctions(repoFuncs, evt) {
   Object.entries(repoFuncs).forEach(([component, funcs]) => {
     funcs.forEach(function (func) {
       try {
-        var result = eval(func);
+        const result = eval(func); // Must run in sandboxed iframe
         console.log("SANDBOX eval", component, result);
-        evt.source.postMessage(
-          { component: component, version: result, original: evt.data },
-          "*"
-        );
+        if (evt.source && typeof evt.source.postMessage === "function") {
+          evt.source.postMessage(
+            {
+              component: component,
+              version: result,
+              original: evt.data,
+            },
+            evt.origin || "*"
+          );
+        }
       } catch (e) {
-        //if (component == "nextjs") console.log("SANDBOX ERROR", e);
+        console.warn(`Eval failed for ${component}:`, e);
       }
     });
   });
-  /*} catch(e) {
-    console.warn(e);
-  }*/
-  evt.source.postMessage({ done: "true" }, "*");
-});
+}
