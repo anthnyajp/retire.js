@@ -14,9 +14,9 @@ const options = {
 
 const limit = process.argv[2];
 
-var hash = {
+const hash = {
   sha1: function (data) {
-    shasum = crypto.createHash("sha1");
+    let shasum = crypto.createHash("sha1");
     shasum.update(data);
     return shasum.digest("hex");
   },
@@ -99,158 +99,112 @@ async function runTests(jsRepo) {
   for (let [name, content] of Object.entries(testCases)) {
     if (limit && limit != name) continue;
     console.log(`Testing ${name}`);
-    for (let [template, tcontent] of Object.entries(content)) {
-      let {
-        versions,
-        subversions,
-        contentOnly,
-        additionalVersions,
-        allowedOtherComponents,
-        allowAstMiss,
-        allowContentMiss,
-      } = tcontent;
-      if (limit) {
-        versions = Array.from(
-          new Set(versions.concat(additionalVersions || []))
-        );
-      }
-      subversions = subversions || [""];
-      for (let version of versions) {
-        for (let sub of subversions) {
-          let t = template
-            .replace(/§§version§§/g, version)
-            .replace(/§§subversion§§/g, sub);
-          if (!contentOnly) {
-            let resultsUri = retire.scanUri(t, jsRepo);
-            let resultsFilename = retire.scanFileName(
-              t.split("/").pop(),
-              jsRepo
-            );
-            let results = resultsUri.concat(resultsFilename);
-            if (results.length == 0) {
-              exitWithError(
-                `Did not detect ${version} of ${name} using uri or filename on ${t}`
-              );
-            }
-            if (results.length > 1) {
-              exitWithError(
-                `Detect multiple components in ${name} using uri and filename on ${t} : ${results
-                  .map((a) => a.component)
-                  .join(", ")}`
-              );
-            }
-            if (results[0].component != name) {
-              exitWithError(
-                `Wrong component for ${version} of ${name} using uri or filename on ${t}: ${results[0].component}`
-              );
-            }
-            if (!results[0].version.startsWith(version)) {
-              exitWithError(
-                `Wrong version for ${version} of ${name} using uri or filename on ${t}: ${results[0].version}`
-              );
-            }
-          }
-          let content = "";
-          try {
-            content = await dl(t);
-          } catch (e) {
-            if (e.message && e.message.includes("Failed to download")) {
-              console.log("Failed to download, ignoring");
-              continue;
-            }
-            if (sub == ".min") {
-              console.log("Ignoring missing minified version", e);
-              continue;
-            }
-            exitWithError(`Failed to download ${t}: ${e}`);
-          }
-          const cRs = Date.now();
-          let contentResults = retire.scanFileContent(content, jsRepo, hash);
-          const cRt = Date.now() - cRs;
-          if (allowedOtherComponents)
-            contentResults = contentResults.filter(
-              (x) => !allowedOtherComponents.includes(x.component)
-            );
-          const canSkipContent =
-            allowContentMiss && allowContentMiss.includes(version);
-          if (contentResults.length == 0 && !canSkipContent) {
-            exitWithError(
-              `Did not detect ${version} of ${name} using content on ${t}`
-            );
-          }
-          if (
-            !canSkipContent &&
-            contentResults.length > 1 &&
-            contentResults[0].component != "jquery-ui"
-          ) {
-            //Allow multiple detections for jquery ui due to dialog, autocomplete etc.
-            exitWithError(
-              `Detect multiple components in ${name} using content on ${t} : ${contentResults
-                .map((a) => a.component)
-                .join(", ")}`
-            );
-          }
-          if (!canSkipContent && contentResults[0].component != name) {
-            exitWithError(
-              `Wrong component for ${version} of ${name} using uri or filename on ${t}: ${contentResults[0].component}`
-            );
-          }
-          if (
-            !canSkipContent &&
-            !contentResults[0].version.startsWith(version)
-          ) {
-            exitWithError(
-              `Wrong version for ${version} of ${name} using content on ${t}: ${contentResults[0].version}`
-            );
-          }
-          let bRt = "-";
-          if (queries[name]) {
-            const bRs = Date.now();
-            let astResults = unique(deepScan(content.toString(), jsRepo));
-            bRt = Date.now() - bRs;
-            if (allowedOtherComponents)
-              astResults = astResults.filter(
-                (x) => !allowedOtherComponents.includes(x.component)
-              );
+    await testComponent(name, content, jsRepo);
+    success(" Successfully tested uri/filename and content detection!");
+  }
+}
 
-            if (
-              astResults.length == 0 &&
-              (!allowAstMiss || !allowAstMiss.includes(version))
-            ) {
-              exitWithError(
-                `Did not detect ${version} of ${name} using ast on ${t}`
-              );
-            }
-            if (astResults.length > 1) {
-              exitWithError(
-                `Detect multiple components in ${name} using ast on ${t} : ${astResults
-                  .map((a) => a.component + " " + a.version)
-                  .join(", ")}`
-              );
-            }
-            if (
-              (!allowAstMiss || !allowAstMiss.includes(version)) &&
-              astResults[0].component != name
-            ) {
-              exitWithError(
-                `Wrong component for ${version} of ${name} using ast on ${t}: ${astResults[0].component}`
-              );
-            }
-            if (
-              (!allowAstMiss || !allowAstMiss.includes(version)) &&
-              !astResults[0].version.startsWith(version)
-            ) {
-              exitWithError(
-                `Wrong version for ${version} of ${name} using ast on ${t}: ${astResults[0].version}`
-              );
-            }
-          }
-
-          success(`  - ${name} @ ${version}  C: ${cRt}ms B: ${bRt}ms`);
-        }
+async function testComponent(name, content, jsRepo) {
+  for (let [template, tcontent] of Object.entries(content)) {
+    let {
+      versions,
+      subversions,
+      contentOnly,
+      additionalVersions,
+      allowedOtherComponents,
+      allowAstMiss,
+      allowContentMiss,
+    } = tcontent;
+    if (limit) {
+      versions = Array.from(
+        new Set(versions.concat(additionalVersions || []))
+      );
+    }
+    subversions = subversions || [""];
+    for (let version of versions) {
+      for (let sub of subversions) {
+        let t = template
+          .replace(/§§version§§/g, version)
+          .replace(/§§subversion§§/g, sub);
+        await testVersion(name, version, sub, t, jsRepo, { contentOnly, allowedOtherComponents, allowAstMiss, allowContentMiss });
       }
     }
-    success(" Successfully tested uri/filename and content detection!");
+  }
+}
+
+async function testVersion(name, version, sub, t, jsRepo, options) {
+  const { contentOnly, allowedOtherComponents, allowAstMiss, allowContentMiss } = options;
+  if (!contentOnly) {
+    testUriAndFilename(name, version, t, jsRepo);
+  }
+  let content = await fetchContent(t, sub);
+  if (!content) return;
+  testContent(name, version, t, jsRepo, content, allowedOtherComponents, allowContentMiss);
+  if (queries[name]) {
+    testAst(name, version, t, jsRepo, content, allowedOtherComponents, allowAstMiss);
+  }
+}
+
+function testUriAndFilename(name, version, t, jsRepo) {
+  let resultsUri = retire.scanUri(t, jsRepo);
+  let resultsFilename = retire.scanFileName(t.split("/").pop(), jsRepo);
+  let results = resultsUri.concat(resultsFilename);
+  validateResults(name, version, t, results, "uri or filename");
+}
+
+async function fetchContent(t, sub) {
+  try {
+    return await dl(t);
+  } catch (e) {
+    if (e.message && e.message.includes("Failed to download")) {
+      console.log("Failed to download, ignoring");
+      return null;
+    }
+    if (sub == ".min") {
+      console.log("Ignoring missing minified version", e);
+      return null;
+    }
+    exitWithError(`Failed to download ${t}: ${e}`);
+  }
+}
+
+function testContent(name, version, t, jsRepo, content, allowedOtherComponents, allowContentMiss) {
+  const cRs = Date.now();
+  let contentResults = retire.scanFileContent(content, jsRepo, hash);
+  const cRt = Date.now() - cRs;
+  if (allowedOtherComponents)
+    contentResults = contentResults.filter(
+      (x) => !allowedOtherComponents.includes(x.component)
+    );
+  validateResults(name, version, t, contentResults, "content", allowContentMiss);
+  success(`  - ${name} @ ${version}  C: ${cRt}ms`);
+}
+
+function testAst(name, version, t, jsRepo, content, allowedOtherComponents, allowAstMiss) {
+  const bRs = Date.now();
+  let astResults = unique(deepScan(content.toString(), jsRepo));
+  const bRt = Date.now() - bRs;
+  if (allowedOtherComponents)
+    astResults = astResults.filter(
+      (x) => !allowedOtherComponents.includes(x.component)
+    );
+  validateResults(name, version, t, astResults, "ast", allowAstMiss);
+  success(`  - ${name} @ ${version}  B: ${bRt}ms`);
+}
+
+function validateResults(name, version, t, results, method, allowMiss = []) {
+  const canSkip = allowMiss && allowMiss.includes(version);
+  if (results.length == 0 && !canSkip) {
+    exitWithError(`Did not detect ${version} of ${name} using ${method} on ${t}`);
+  }
+  if (results.length > 1) {
+    exitWithError(`Detect multiple components in ${name} using ${method} on ${t} : ${results.map((a) => a.component).join(", ")}`);
+  }
+  if (!canSkip && results[0].component != name) {
+    exitWithError(`Wrong component for ${version} of ${name} using ${method} on ${t}: ${results[0].component}`);
+  }
+  if (!canSkip && !results[0].version.startsWith(version)) {
+    exitWithError(`Wrong version for ${version} of ${name} using ${method} on ${t}: ${results[0].version}`);
   }
 }
 

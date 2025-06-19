@@ -1,17 +1,18 @@
-#!/bin/env bash
+import sys
+import os
+from http.server import SimpleHTTPRequestHandler, HTTPServer
 
-PYTHON_VERSION=$(python -c 'import sys; print("%i" % (sys.hexversion<0x03000000))')
+# Determine Python version
+PYTHON_VERSION = sys.version_info[0]
 
-if [ -z "$1" ]; then
-    PORT=8000
-else
-    PORT=$1
-fi
+# Set port
+PORT = 8000 if len(sys.argv) < 2 else int(sys.argv[1])
 
-cd repository
+# Change directory to 'repository'
+os.chdir('repository')
 
-if [ ${PYTHON_VERSION} -eq 0 ]; then
-    python -m http.server $PORT
-else
-    python -m SimpleHTTPServer $PORT
-fi
+# Start server
+server = HTTPServer(('0.0.0.0', PORT), SimpleHTTPRequestHandler)
+
+print(f"Serving on port {PORT}")
+server.serve_forever()

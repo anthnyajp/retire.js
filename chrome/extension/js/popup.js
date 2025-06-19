@@ -85,7 +85,7 @@ function show(totalResults) {
 
   document.getElementById("results").innerHTML = "";
   console.log(totalResults);
-  var merged = {};
+  let merged = {};
   totalResults.forEach((rs) => {
     merged[rs.url] = merged[rs.url] || { url: rs.url, results: [] };
     rs.results.forEach((r) => {
@@ -161,25 +161,24 @@ function show(totalResults) {
       });
       const severity = mapSeverity(r.vulnerabilities);
       tr.className = "vulnerable " + severity;
-      var table = document.createElement("table");
+      let table = document.createElement("table");
       vulns.appendChild(table);
       r.vulnerabilities.forEach(function (v) {
-        var tr = document.createElement("tr");
+        let tr = document.createElement("tr");
         tr.className = v.severity;
         table.appendChild(tr);
         td(tr).innerText = v.severity || " ";
         td(tr).innerText = v.identifiers
-          ? v.identifiers
-              .mapOwnProperty(function (val) {
+          ? flattenArray(
+              v.identifiers.map((val) => {
                 return val;
               })
-              .flatten()
-              .join(" ")
+            ).join(" ")
           : " ";
         let info = td(tr);
         info.className = "info";
         v.info.forEach(function (u, i) {
-          var a = document.createElement("a");
+          let a = document.createElement("a");
           a.innerText = i + 1;
           a.href = u;
           a.title = u;
@@ -196,20 +195,25 @@ function td(tr) {
   return cell;
 }
 
-Object.prototype.forEachOwnProperty = function (f) {
-  mapOwnProperty(f);
-};
-Object.prototype.mapOwnProperty = function (f) {
-  var results = [];
-  for (var i in this) {
-    if (this.hasOwnProperty(i)) results.push(f(this[i], i));
+// Utility function to iterate over own properties of an object
+function forEachOwnProperty(obj, f) {
+  for (let i in obj) {
+    if (obj.hasOwnProperty(i)) f(obj[i], i);
+  }
+}
+
+// Utility function to map over own properties of an object
+function mapOwnProperty(obj, f) {
+  let results = [];
+  for (let i in obj) {
+    if (obj.hasOwnProperty(i)) results.push(f(obj[i], i));
   }
   return results;
-};
+}
 
-Array.prototype.flatten = function () {
-  return this.reduce((a, b) => a.concat(b), []);
-};
+function flatten(array) {
+  return array.reduce((a, b) => a.concat(b), []);
+}
 
 function sendMessage(message, data, callback) {
   chrome.runtime.sendMessage(

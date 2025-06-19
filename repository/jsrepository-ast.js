@@ -195,7 +195,6 @@ exports.queries = {
     )`,
   ],
   angularjs: [
-    /* {angularVersion:"1.7.5"} */
     `//ObjectExpression[
       /Property/:key/:name == "angularVersion"
     ]/:properties/$$:value/:value`,

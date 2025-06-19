@@ -1,6 +1,6 @@
 # Retire.js
 
-#### What you require you must also retire
+## What you require you must also retire
 
 There is a plethora of JavaScript libraries for use on the Web and in Node.JS apps out there. This greatly simplifies development,but we need to stay up-to-date on security fixes. "Using Components with Known Vulnerabilities" is now a part of the [OWASP Top 10](https://www.owasp.org/index.php/Top_10_2013-A9-Using_Components_with_Known_Vulnerabilities) list of security risks and insecure libraries can pose a huge risk to your Web app. The goal of Retire.js is to help you detect the use of JS-library versions with known vulnerabilities.
 
@@ -8,7 +8,7 @@ Retire.js can be used in many ways:
 
 1. [As command line scanner](https://github.com/RetireJS/retire.js/tree/master/node)
 2. [As a grunt plugin](https://github.com/bekk/grunt-retire)
-3. [As a gulp task](#user-content-gulp-task)
+3. [As a gulp task](## Gulp task)
 4. [As a Chrome extension](https://github.com/RetireJS/retire.js/tree/master/chrome) - **Not** officially available in the Chrome web store
 5. [As a Firefox extension](https://github.com/RetireJS/retire.js/tree/master/firefox) - **Deprecated** Let us know if you want to maintain and undeprecate it.
 6. [As a Burp Extension](https://github.com/h3xstream/burp-retire-js) or [OWASP ZAP Add-on](https://www.zaproxy.org/docs/desktop/addons/retire.js/)
@@ -17,8 +17,8 @@ Retire.js can be used in many ways:
 
 Scan a web app or node app for use of vulnerable JavaScript libraries and/or Node.JS modules. If you haven't already, you need to [install node/npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm) first. In the source code folder of the application folder run:
 
-```
-$ npm install -g retire
+```bash
+npm install -g retire
 $ retire
 ```
 
@@ -26,8 +26,8 @@ $ retire
 
 retire.js can generate SBOMs in the CycloneDX-format:
 
-```
-$ retire --outputformat cyclonedx
+```bash
+retire --outputformat cyclonedx
 ```
 
 By default retire.js will exit with code 13 if it finds vulnerabilities. This can be overridden with `--exitwith 0`.
@@ -79,10 +79,10 @@ Scans visited sites for references to insecure libraries, and puts warnings in t
 
 [@h3xstream](https://github.com/h3xstream) has adapted Retire.js as a [plugin](https://github.com/h3xstream/burp-retire-js) for the penetration testing tools [Burp](https://portswigger.net/burp/) and [OWASP ZAP](https://www.zaproxy.org).
 
-The [OWASP ZAP](https://www.zaproxy.org) team officially supports a Retire.js add-on which is available via the ZAP Marketplace and is included by default in the ZAP weekly releases: https://www.zaproxy.org/docs/desktop/addons/retire.js/
+The [OWASP ZAP](https://www.zaproxy.org) team officially supports a Retire.js add-on which is available via the ZAP Marketplace and is included by default in the ZAP weekly releases: <https://www.zaproxy.org/docs/desktop/addons/retire.js/>
 
 ## Donate
 
-<a href="https://www.paypal.me/eoftedal"><img src="https://www.paypalobjects.com/en_US/i/btn/btn_donate_SM.gif"></a>
+[![Donate](https://www.paypalobjects.com/en_US/i/btn/btn_donate_SM.gif)](https://www.paypal.me/eoftedal)
 
 Donations will be used to fund the maintainance of the tool and vulnerability repo.

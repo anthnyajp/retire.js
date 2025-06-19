@@ -1,13 +1,12 @@
-var extension = null;
+let extension = null;
 window.addEventListener("message", function orig(evt) {
   if (evt.data.repoFuncs) {
     console.log("SANDBOX: I received a message", evt);
     extension = evt.source;
-    var iframe = document.createElement("iframe");
+    let iframe = document.createElement("iframe");
     iframe.retireEvent = evt;
     iframe.src = "inner-sandbox.html";
     iframe.setAttribute("data-url", evt.data.url);
-    //iframe.style = "visibility: hidden";
     document.body.appendChild(iframe);
     console.log("outer", evt.data);
     setTimeout(function () {

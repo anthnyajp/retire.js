@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "retire.js",
   "description": "Scanning website for vulnerable JS libraries. Icon by studiomx",
-  "version": "2.2.5",
+  "version": "2.2.6",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

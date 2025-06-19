@@ -3,9 +3,9 @@ import "./generated/retire-chrome.js";
 const retire = retirechrome.retire;
 console.log(retire);
 
-var scanEnabled = true;
-var deepScanEnabled = true;
-var repo;
+let scanEnabled = true;
+let deepScanEnabled = true;
+let repo;
 
 async function createOffscreen() {
   if (await chrome.offscreen.hasDocument()) return;
@@ -29,7 +29,6 @@ function messageHandler(msg, sendResponse) {
       listening = true;
       chrome.webRequest.onCompleted.addListener(
         (details) => {
-          //console.log("Completed", details.url, details.type);
           if (details.type == "script") {
             chrome.runtime.sendMessage({
               type: "scan",
