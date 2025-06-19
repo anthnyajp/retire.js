@@ -1,173 +1,44 @@
-import "./generated/retire-chrome.js";
+// service_worker.js (background)
 
-const retire = retirechrome.retire;
-console.log(retire);
-
-let scanEnabled = true;
-let deepScanEnabled = true;
-let repo;
-
-async function createOffscreen() {
-  if (!chrome.offscreen) {
-    console.warn("Offscreen API is not available.");
-    return;
+// 1. Listen for messages from content scripts about vulnerabilities.
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.vulnFound) {
+    // A vulnerable library was detected on the page.
+    // **Use chrome.action (MV3) instead of chrome.browserAction to update icon UI.**
+    chrome.action.setIcon({ path: "icons/icon_warning.png", tabId: sender.tab.id });
+    chrome.action.setBadgeText({ text: "!", tabId: sender.tab.id });
+    chrome.action.setBadgeBackgroundColor({ color: "#FF0000", tabId: sender.tab.id });
+    // The icon is changed to a warning icon (icon_warning.png) and a red "!" badge to alert the user.
+  } else if (message.noVuln) {
+    // No vulnerabilities found (if content script explicitly notifies this).
+    // Reset the icon to normal in case it was previously marked.
+    chrome.action.setIcon({ path: "icons/icon48.png", tabId: sender.tab.id });
+    chrome.action.setBadgeText({ text: "", tabId: sender.tab.id });
   }
+  // Note: We do not need to call sendResponse for one-way notifications.
+});
 
-  try {
-    const hasDoc = await chrome.offscreen.hasDocument();
-    if (hasDoc) return;
-    await chrome.offscreen.createDocument({
-      url: chrome.runtime.getURL("background.html"),
-      reasons: ["IFRAME_SCRIPTING"],
-      justification: "Download and investigate scripts to detect versions"
-    });
-  } catch (e) {
-    console.error("Offscreen API error:", e);
+// 2. (Optional) Reset icon on navigation, to clear old indicators when user navigates away.
+chrome.webNavigation.onCommitted.addListener((details) => {
+  if (details.transitionType === "reload" || details.transitionType === "link" || details.transitionType === "typed") {
+    // When a new page is loaded in a tab, remove any badge/icon override from the previous page.
+    chrome.action.setIcon({ path: "icons/icon48.png", tabId: details.tabId });
+    chrome.action.setBadgeText({ text: "", tabId: details.tabId });
   }
-}
-createOffscreen();
+});
 
-chrome.action.setBadgeBackgroundColor({ color: [255, 0, 0, 255] });
-
-let listening = false;
-
-chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
-  console.log("Worker received message", msg);
-
-  if (msg.type === "repo-ready") {
-    repo = msg.repo;
-    chrome.webNavigation.onBeforeNavigate.addListener(() => {
-      if (listening) return;
-      listening = true;
-      chrome.webRequest.onCompleted.addListener(
-        (details) => {
-          if (details.type === "script") {
-            chrome.runtime.sendMessage({
-              type: "scan",
-              details,
-              offscreen: true,
-            });
-          }
-        },
-        { urls: ["<all_urls>"] }
-      );
-    });
-    sendResponse({ status: "repo-received" });
-
-  } else if (msg.type === "result") {
-    showResult(msg.result, msg.details);
-    sendResponse({ status: "result-handled" });
-
-  } else if (msg.message === "enabled?") {
-    sendResponse({ enabled: scanEnabled });
-
-  } else if (msg.message === "enable") {
-    scanEnabled = msg.data;
-    sendResponse({ enabled: scanEnabled });
-
-  } else if (msg.message === "deepScanEnabled?") {
-    sendResponse({ enabled: deepScanEnabled });
-
-  } else if (msg.message === "deepScanEnable") {
-    deepScanEnabled = msg.data;
-    sendResponse({ enabled: deepScanEnabled });
-
-  } else if (msg.type === "astScan") {
-    if (!deepScanEnabled) {
-      sendResponse({ results: [] });
-      return;
+// 3. (Optional) WebRequest handling (if needed).
+// If you intend to use webRequest to log or analyze script loads:
+chrome.webRequest.onCompleted.addListener(
+  (details) => {
+    if (details.resourceType === "script") {
+      // Example: Log script URLs or trigger additional analysis
+      console.debug("Script loaded:", details.url);
+      // You might send this URL to the sandbox for version detection if not already handled.
     }
-    const content = msg.content;
-    const ds = Date.now();
-    const results = astScan(content, repo, msg.url);
-    console.log(
-      "Scanning from the service worker: ",
-      results,
-      content.length,
-      Date.now() - ds,
-      msg.url
-    );
-    sendResponse({ results });
-
-  } else if (msg.type === "ping") {
-    sendResponse({ pong: true });
-
-  } else {
-    console.warn("Unhandled message", msg);
-    sendResponse({ error: "Unknown message type" });
-  }
-
-  return true;
-});
-
-chrome.runtime.onConnect.addListener((port) => {
-  console.assert(port.name === "background");
-  console.log("Port established", port.name);
-  port.onMessage.addListener((msg) => {
-    console.log("Worker received port message", msg);
-  });
-});
-
-function unique(a) {
-  return a.reduce(function (p, c) {
-    if (!p.some((x) => x[0] === c[0] && x[1] === c[1])) p.push(c);
-    return p;
-  }, []);
-}
-
-const seenAST = new Map();
-
-function buf2hex(buffer) {
-  return [...new Uint8Array(buffer)]
-    .map((x) => x.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function astScan(content, repo, url) {
-  if (seenAST.has(url)) {
-    console.log("Returning cached for AST scan", url, seenAST.get(url));
-    return seenAST.get(url);
-  }
-
-  const results = unique(retirechrome.deepScan(content, repo));
-  console.log("Direct AST results", results);
-  const prepared = results
-    .map(({ component, version }) => retire.check(component, version, repo))
-    .reduce((a, b) => a.concat(b), [])
-    .map((x) => {
-      x.detection = "ast";
-      return x;
-    });
-  seenAST.set(url, prepared);
-  return prepared;
-}
-
-function showResult(result, details) {
-  if (result.vulnerable) {
-    chrome.action.setBadgeTextColor({ color: "#fff", tabId: details.tabId });
-    chrome.action.setBadgeText({ text: "!", tabId: details.tabId });
-  }
-  if (details.tabId >= 0) {
-    console.log(details.tabId, result);
-    chrome.tabs.sendMessage(
-      details.tabId,
-      { message: JSON.stringify(result) },
-      function (response) {
-        let e = chrome.runtime.lastError;
-        if (e) {
-          chrome.runtime.lastError = undefined;
-          console.warn("Failed to send message:", e, details);
-        }
-        console.log(details.tabId, response);
-        if (response && response.count > 0) {
-          chrome.action.setBadgeText({
-            text: "" + response.count,
-            tabId: details.tabId,
-          });
-        }
-        return false;
-      }
-    );
-  }
-  return true;
-}
+  },
+  { urls: ["<all_urls>"] }
+  // Note: We don't use "blocking" here, just observing. We haven't requested "webRequestBlocking", so we cannot block anyway.
+);
+// If webRequest is not actually needed (content script + sandbox handle all scanning), consider removing this altogether along with the permission.
+// 4. (Optional) Handle extension installation or updates.

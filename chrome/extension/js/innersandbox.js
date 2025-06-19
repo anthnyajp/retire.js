@@ -63,21 +63,13 @@ window.addEventListener("message", function (evt) {
 function processRepoFunctions(repoFuncs, evt) {
   Object.entries(repoFuncs).forEach(([component, funcs]) => {
     funcs.forEach(function (func) {
+      // Replace eval with safer function construction
       try {
-        const result = eval(func); // Must run in sandboxed iframe
+        const sandboxedFn = new Function('return (' + func + ')')();
+        const result = typeof sandboxedFn === 'function' ? sandboxedFn() : sandboxedFn;
         console.log("SANDBOX eval", component, result);
-        if (evt.source && typeof evt.source.postMessage === "function") {
-          evt.source.postMessage(
-            {
-              component: component,
-              version: result,
-              original: evt.data,
-            },
-            evt.origin || "*"
-          );
-        }
       } catch (e) {
-        console.warn(`Eval failed for ${component}:`, e);
+        console.warn(`Function execution failed for ${component}:`, e);
       }
     });
   });
