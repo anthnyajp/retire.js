@@ -1,18 +1,19 @@
+
 window.addEventListener(
   "load",
   () => {
     sendMessage("enabled?", null, (response) => {
       document.querySelector("input[type=checkbox]#enabled").checked =
-        response.enabled;
+        response?.enabled || false;
     });
     sendMessage("deepScanEnabled?", null, (response) => {
       document.querySelector("input[type=checkbox]#deepEnabled").checked =
-        response.enabled;
+        response?.enabled || false;
     });
 
     document.querySelector("input[type=checkbox]#enabled").addEventListener(
       "click",
-      () => {
+      function () {
         chrome.action.setIcon({
           path: this.checked ? "icons/icon48.png" : "icons/icon_bw48.png",
         });
@@ -22,7 +23,7 @@ window.addEventListener(
     );
     document.querySelector("input[type=checkbox]#deepEnabled").addEventListener(
       "click",
-      () => {
+      function () {
         sendMessage("deepScanEnable", this.checked, null);
       },
       false
@@ -53,173 +54,38 @@ function queryForResults() {
       tabs[0].id,
       { getDetected: 1 },
       function (response) {
+        if (chrome.runtime.lastError) {
+          console.warn("No response from content script:", chrome.runtime.lastError.message);
+          return;
+        }
+        if (!response) {
+          console.warn("Empty response from content script.");
+          return;
+        }
         show(response);
-        console.log(response);
       }
     );
   });
-}
-function mapSeverity(vulns) {
-  if (vulns.some((v) => v.severity == "critical")) return "critical";
-  if (vulns.some((v) => v.severity == "high")) return "high";
-  if (vulns.some((v) => v.severity == "medium")) return "medium";
-  if (vulns.some((v) => v.severity == "low")) return "low";
-  return "high";
-}
-const severityMap = {
-  critical: 4,
-  high: 3,
-  medium: 2,
-  low: 1,
-  unknown: 0,
-};
-const detMapping = {
-  ast: "AST",
-  uri: "URI",
-  filename: "file name",
-  filecontent: "file content",
-};
-
-function show(totalResults) {
-  if (totalResults == null || totalResults == undefined) return;
-
-  document.getElementById("results").innerHTML = "";
-  console.log(totalResults);
-  let merged = {};
-  totalResults.forEach((rs) => {
-    merged[rs.url] = merged[rs.url] || { url: rs.url, results: [] };
-    rs.results.forEach((r) => {
-      if (
-        !merged[rs.url].results.some(
-          (x) => x.component == r.component && x.version == r.version
-        )
-      ) {
-        merged[rs.url].results.push(r);
-      }
-    });
-  });
-
-  let results = Object.values(merged);
-
-  const vulnerabilities = results.reduce((acc, rs) => {
-    return (
-      acc +
-      rs.results.reduce((acc, r) => {
-        return acc + (r.vulnerabilities ? r.vulnerabilities.length : 0);
-      }, 0)
-    );
-  }, 0);
-  document.querySelector("#stats").innerHTML = `<span>URLs scanned: ${
-    results.length
-  }</span> <span class="${
-    vulnerabilities.length > 0 ? "vuln" : ""
-  }">Vulnerabilities found: ${vulnerabilities}</span>`;
-
-  results.forEach((rs) => {
-    rs.results.forEach((r) => {
-      r.url = rs.url;
-      r.vulnerable = r.vulnerabilities && r.vulnerabilities.length > 0;
-    });
-    if (rs.results.length == 0) {
-      rs.results = [{ url: rs.url, unknown: true, component: "unknown" }];
-    }
-  });
-  let res = results.reduce((x, y) => {
-    return x.concat(y.results);
-  }, []);
-  res.sort((x, y) => {
-    if (x.unknown != y.unknown) {
-      return x.unknown ? 1 : -1;
-    }
-    if (x.vulnerable != y.vulnerable) {
-      return x.vulnerable ? -1 : 1;
-    }
-    return (x.component + x.version + x.url).localeCompare(
-      y.component + y.version + y.url
-    );
-  });
-  res.forEach((r) => {
-    let tr = document.createElement("tr");
-    document.getElementById("results").appendChild(tr);
-    let vulns;
-    if (r.unknown) {
-      tr.className = "unknown";
-      td(tr).innerText = "-";
-      td(tr).innerText = "-";
-      vulns = td(tr);
-      vulns.innerHTML = `Did not recognize ${r.url}`;
-    } else {
-      td(tr).innerText = r.component;
-      td(tr).innerText = r.version;
-      vulns = td(tr);
-      let d = detMapping[r.detection] ?? r.detection;
-      vulns.innerHTML = `${r.url} (${d} detection)`;
-    }
-    if (r.vulnerabilities && r.vulnerabilities.length > 0) {
-      r.vulnerabilities.sort((x, y) => {
-        return severityMap[y.severity] - severityMap[x.severity];
-      });
-      const severity = mapSeverity(r.vulnerabilities);
-      tr.className = "vulnerable " + severity;
-      let table = document.createElement("table");
-      vulns.appendChild(table);
-      r.vulnerabilities.forEach(function (v) {
-        let tr = document.createElement("tr");
-        tr.className = v.severity;
-        table.appendChild(tr);
-        td(tr).innerText = v.severity || " ";
-        td(tr).innerText = v.identifiers
-          ? flattenArray(
-              v.identifiers.map((val) => {
-                return val;
-              })
-            ).join(" ")
-          : " ";
-        let info = td(tr);
-        info.className = "info";
-        v.info.forEach(function (u, i) {
-          let a = document.createElement("a");
-          a.innerText = i + 1;
-          a.href = u;
-          a.title = u;
-          a.target = "_blank";
-          info.appendChild(a);
-        });
-      });
-    }
-  });
-}
-function td(tr) {
-  let cell = document.createElement("td");
-  tr.appendChild(cell);
-  return cell;
-}
-
-// Utility function to iterate over own properties of an object
-function forEachOwnProperty(obj, f) {
-  for (let i in obj) {
-    if (obj.hasOwnProperty(i)) f(obj[i], i);
-  }
-}
-
-// Utility function to map over own properties of an object
-function mapOwnProperty(obj, f) {
-  let results = [];
-  for (let i in obj) {
-    if (obj.hasOwnProperty(i)) results.push(f(obj[i], i));
-  }
-  return results;
-}
-
-function flatten(array) {
-  return array.reduce((a, b) => a.concat(b), []);
 }
 
 function sendMessage(message, data, callback) {
   chrome.runtime.sendMessage(
     { to: "background", message: message, data: data },
     (response) => {
+      if (chrome.runtime.lastError) {
+        console.warn("Runtime error in message:", chrome.runtime.lastError.message);
+        return;
+      }
       callback && callback(response);
     }
   );
+}
+function showResult(result, details) {
+  const results = document.getElementById("results");
+  const resultDiv = document.createElement("div");
+  resultDiv.className = "result";
+  resultDiv.innerHTML = `<h3>${result.component} (${result.version})</h3>
+    <p>Detected in: ${details.url}</p>
+    <p>Vulnerable: ${result.vulnerable ? "Yes" : "No"}</p>`;
+  results.appendChild(resultDiv);
 }

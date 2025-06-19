@@ -9,10 +9,8 @@
     "128": "icons/icon128.png"
   },
   "author": "Erlend Oftedal",
-
   "permissions": [
     "webRequest",
-    "offscreen",
     "webNavigation"
   ],
   "host_permissions": [
@@ -26,7 +24,7 @@
     "default_popup": "popup.html"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self' https unsafe-inline ; object-src 'self';"
+    "extension_pages": "script-src 'self'; object-src 'self';"
   },
   "background": {
     "service_worker": "js/service_worker.js",
@@ -34,12 +32,19 @@
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["js/content.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "js/content.js"
+      ],
       "run_at": "document_start"
     }
   ],
   "sandbox": {
-    "pages": ["inner-sandbox.html"]
+    "pages": [
+      "inner-sandbox.html"
+    ]
   }
 }

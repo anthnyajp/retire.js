@@ -8,12 +8,22 @@ let deepScanEnabled = true;
 let repo;
 
 async function createOffscreen() {
-  if (await chrome.offscreen.hasDocument()) return;
-  chrome.offscreen.createDocument({
-    url: chrome.runtime.getURL("background.html"),
-    reasons: ["IFRAME_SCRIPTING"],
-    justification: "Download and investigate scripts to detect versions",
-  });
+  if (!chrome.offscreen) {
+    console.warn("Offscreen API is not available.");
+    return;
+  }
+
+  try {
+    const hasDoc = await chrome.offscreen.hasDocument();
+    if (hasDoc) return;
+    await chrome.offscreen.createDocument({
+      url: chrome.runtime.getURL("background.html"),
+      reasons: ["IFRAME_SCRIPTING"],
+      justification: "Download and investigate scripts to detect versions"
+    });
+  } catch (e) {
+    console.error("Offscreen API error:", e);
+  }
 }
 createOffscreen();
 
@@ -21,15 +31,17 @@ chrome.action.setBadgeBackgroundColor({ color: [255, 0, 0, 255] });
 
 let listening = false;
 
-function messageHandler(msg, sendResponse) {
-  if (msg.type == "repo-ready") {
+chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
+  console.log("Worker received message", msg);
+
+  if (msg.type === "repo-ready") {
     repo = msg.repo;
     chrome.webNavigation.onBeforeNavigate.addListener(() => {
       if (listening) return;
       listening = true;
       chrome.webRequest.onCompleted.addListener(
         (details) => {
-          if (details.type == "script") {
+          if (details.type === "script") {
             chrome.runtime.sendMessage({
               type: "scan",
               details,
@@ -40,18 +52,31 @@ function messageHandler(msg, sendResponse) {
         { urls: ["<all_urls>"] }
       );
     });
-  } else if (msg.type == "result") {
+    sendResponse({ status: "repo-received" });
+
+  } else if (msg.type === "result") {
     showResult(msg.result, msg.details);
-  } else if (msg.message == "enabled?") {
+    sendResponse({ status: "result-handled" });
+
+  } else if (msg.message === "enabled?") {
     sendResponse({ enabled: scanEnabled });
-  } else if (msg.message == "enable") {
-    scanEnabled = !scanEnabled;
-  } else if (msg.message == "deepScanEnabled?") {
+
+  } else if (msg.message === "enable") {
+    scanEnabled = msg.data;
+    sendResponse({ enabled: scanEnabled });
+
+  } else if (msg.message === "deepScanEnabled?") {
     sendResponse({ enabled: deepScanEnabled });
-  } else if (msg.message == "deepScanEnable") {
-    deepScanEnabled = !deepScanEnabled;
-  } else if (msg.type == "astScan") {
-    if (!deepScanEnabled) return;
+
+  } else if (msg.message === "deepScanEnable") {
+    deepScanEnabled = msg.data;
+    sendResponse({ enabled: deepScanEnabled });
+
+  } else if (msg.type === "astScan") {
+    if (!deepScanEnabled) {
+      sendResponse({ results: [] });
+      return;
+    }
     const content = msg.content;
     const ds = Date.now();
     const results = astScan(content, repo, msg.url);
@@ -63,29 +88,29 @@ function messageHandler(msg, sendResponse) {
       msg.url
     );
     sendResponse({ results });
-  } else if (msg.type == "ping") {
-    //ignore
+
+  } else if (msg.type === "ping") {
+    sendResponse({ pong: true });
+
   } else {
-    console.warn("worker", msg);
+    console.warn("Unhandled message", msg);
+    sendResponse({ error: "Unknown message type" });
   }
-}
+
+  return true;
+});
 
 chrome.runtime.onConnect.addListener((port) => {
-  console.assert(port.name == "background");
+  console.assert(port.name === "background");
   console.log("Port established", port.name);
   port.onMessage.addListener((msg) => {
     console.log("Worker received port message", msg);
   });
 });
 
-chrome.runtime.onMessage.addListener((msg, _, sendResponse) => {
-  console.log("Worker received message of type", msg.type);
-  messageHandler(msg, sendResponse);
-});
-
 function unique(a) {
   return a.reduce(function (p, c) {
-    if (!p.some((x) => x[0] == c[0] && x[1] == c[1])) p.push(c);
+    if (!p.some((x) => x[0] === c[0] && x[1] === c[1])) p.push(c);
     return p;
   }, []);
 }
@@ -93,7 +118,6 @@ function unique(a) {
 const seenAST = new Map();
 
 function buf2hex(buffer) {
-  // buffer is an ArrayBuffer
   return [...new Uint8Array(buffer)]
     .map((x) => x.toString(16).padStart(2, "0"))
     .join("");
@@ -119,7 +143,6 @@ function astScan(content, repo, url) {
 }
 
 function showResult(result, details) {
-  //setTimeout(function () {
   if (result.vulnerable) {
     chrome.action.setBadgeTextColor({ color: "#fff", tabId: details.tabId });
     chrome.action.setBadgeText({ text: "!", tabId: details.tabId });
@@ -128,9 +151,7 @@ function showResult(result, details) {
     console.log(details.tabId, result);
     chrome.tabs.sendMessage(
       details.tabId,
-      {
-        message: JSON.stringify(result),
-      },
+      { message: JSON.stringify(result) },
       function (response) {
         let e = chrome.runtime.lastError;
         if (e) {
@@ -149,5 +170,4 @@ function showResult(result, details) {
     );
   }
   return true;
-  //}, 3000);
 }
